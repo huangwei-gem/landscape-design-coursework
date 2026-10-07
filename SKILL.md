@@ -1,0 +1,129 @@
+---
+name: landscape-design-coursework
+description: 把风景园林／植物景观规划设计的课程设计做成可交付的一套东西——CAD 施工图图集（DXF+PDF）、方案书（Word，图文并茂）、案例抄绘与借鉴注记、唯一交付目录，并且验收门全绿才说话。当出现下列任何情况就用它：老师给了指导手册／任务书要求"图不能缺"；要做种植设计图／现状图／苗木表／放线坐标表；方案书要"图文并茂"；被指出过图上数字与正文对不上、插图位置不对、案例只是说说没给原图；要用 CAD 底图（DXF/DWG）做场地数据层；交付前要自查；也适用于把"报告+图纸+打包"这类多产物作业做成一条可复跑的脚本管线。即使用户没有说"管线"或"验收门"，只要任务落在这类交付形态里就用本 skill。
+---
+
+# 景观设计课程交付管线
+
+这套东西的核心不是"怎么画图"，而是**怎么让一份 19 张图 + 60 页方案书 + 一个交付目录
+在改到第十轮时仍然自相矛盾为零**。它来自一门植物景观规划与设计课的真实返工记录：
+方案书写"保留 24 株"、图纸图签写"23 株"、三张现状图排在说它们的那一节之外、
+案例只写了"借鉴其理念"而没有一张原图——这些错误肉眼翻文件是抓不出来的，
+但每一条都能用几十行 Python 抓出来。
+
+先做一件事：`python scripts/check_env.py`。它查 7 个必需库、matplotlib 中文字体、
+本机 accoreconsole，缺什么给一条 pip 命令。
+
+## 五条原则（其余都是推论）
+
+1. **数据层是唯一真源。** 底图 DXF → `site.json`（红线、地形、建筑、道路、现状符号）→
+   `design.json`（布点、分区、林缘线）→ `stats.json`（面积、株数、配比、工程量）。
+   图纸和方案书都从这三个 JSON 派生。**任何手抄的数字都会在第三轮改动后变成假数字。**
+2. **数字只有一个出口。** 正文里"159 株"必须由脚本从 `stats.json` 现算填进去。
+   补数（`100-x`）也要现算字段，不能让正文自己减——那叫不可溯源。
+3. **门要能自曝。** 正常全绿和"判据写错了所以永远绿"输出长得一模一样。所以每条判据都要
+   故意破坏一遍看它响不响（`gates_scaffold.py --selftest`）。
+4. **"图文并茂"是可以被检查的。** 出过的图是否全部用进报告、每张图是否贴在说它的那一节、
+   印到纸上的分辨率够不够、图号断没断——四件事都有红字清单（`audit_doc_figs.py`）。
+5. **不许编。** 每个判读结论要有独立依据；没做的作业明说没做；"取不到"要先穷尽手段。
+   详见 `references/no-fabrication.md`。
+
+## 工作顺序
+
+按段推进，每段结束就跑那段的检查，不要攒到最后。
+
+**① 读资料与手册图目** — 先把指导书／任务书原文读干净：要求哪些图、哪些作业、
+每张图的图名原文是什么。`audit_manual_coverage.py --manual 手册.docx --manifest 对照表.csv`
+现读手册自己的"图N"图目和你的图纸对照表对账。**不要抄一份清单**，手册会改版
+（本项目就遇到过 图4 拆成 图4-1／图4-2）。→ `references/manual-coverage.md`
+
+**② 场地数据层** — 用 ezdxf 读底图 DXF，把红线、建筑、道路、植被符号层取出来，
+落到 `site.json`。判读值（树种、冠幅这类图上读不出来的）分档标注：实测／图上判读／按规格推定。
+底图没有的东西不要假装量过。
+
+**③ 设计与派生量** — 在数据层上做布点与分区，`stats.json` 是全部文案的数字出口。
+可种面要真扣：车行道、建筑净空、现状铺装都要从可种面里减掉（本项目把"双线车行走廊"
+按两线垂直距中位 5.5~9.0m 判出来，再按到中心线的垂距做 keep-out）。
+**但双线不一定在两条折线里**：CAD 常把一段路画成同一条三边「U 形」折线（两条短边＝路幅
+横断面、长边＝一侧边线），只按「两两配对」判就永远判不到它，于是往真车道上种树。两类都
+要判，并立一条断言：新植一株都不许落在任何已判出的车行走廊里。
+
+**④ 图纸** — `from dxf_sheet_scaffold import Sheet`，一张图一个实例；图号／图名／图幅／
+比例／对应作业放在一张注册表里，目录、图签、PDF、图注、README 全从它派生。
+比例必须是真的：`mm_per_m = 1000/分母`，放不下就换大幅面，别靠打印缩放。
+每张图 `check()`：越框、压图签、比例装不下、字太小、图签缺项、线数预算。
+**凡场地里有现状车行路，图集里就得有一张「通行组织／交通图」**——种植图集不等于回答了
+「车从哪进、在哪会车、人行带贴哪一侧」。这张图与总平面取同一比例，两张叠得起来才叫可核对。→ `references/sheet-drafting.md`
+
+**⑤ 案例** — 真找（谷德／ArchDaily，检索词贴场地条件而不是贴风格）、真图（原图进交付、
+入册前过 150dpi 门）、真借（注记形状固定：`借鉴（原图见方案书 3.1 与交付 05_案例原图/）：
+<案例名>：<借了什么>`）。→ `references/case-research.md`
+
+**⑥ 方案书** — 诊断与治理合成一册，章节连续编号。所有数字现算。
+同时出一页纸**简版**：同一个数字出口、独立成一个端进点名表、实测页数必须是 1。
+简版不是「少放东西」——总平面图与「指导书每张范图对应我哪张图」的图版，老师会点名要在一页
+里；腾地方的办法是并排与压行距，不是加页。
+写完跑 `audit_doc_figs.py --doc 方案书.docx --figdir 图纸 --registry 图纸目录.csv`。
+→ `references/report-writing.md`
+
+**⑦ 排版复验** — docx 转 PDF 逐页渲图（pypdfium2），看插图有没有被裁一半、字有没有压图。
+脚本绿了不代表眼睛看过。
+
+**⑧ 打包** — 唯一交付目录：图纸 DXF+PDF、预览 PNG、方案书、案例原图、判读证据、README
+（写清先看哪张、每个目录是什么、作业要求对应哪张图）。只留一个交付目录。
+
+**⑨ 验收** — `gates_scaffold.py --spec gates.json --textdir texts/ --selftest --fresh 产物表.csv`。
+红字为 0 且"门不瞎 n/n"才算完。→ `references/gates.md`
+
+## 脚本（都在 scripts/，可独立运行，不依赖任何本项目数据）
+
+| 脚本 | 干什么 | 常用命令 |
+|---|---|---|
+| `check_env.py` | 环境体检：7 个必需库 + 中文字体 + accoreconsole | `python scripts/check_env.py` |
+| `audit_manual_coverage.py` | 现读手册图目，和图纸对照表对账 | `--manual 手册.docx --manifest 对照表.csv --root .` |
+| `audit_doc_figs.py` | 方案书四查：齐／对／清／断 | `--doc 方案书.docx --figdir 图纸 --registry 图纸目录.csv` |
+| `gates_scaffold.py` | 三端点名门 + 破坏自测 + 时效性 | `--demo`；`--spec gates.json --textdir texts/ --selftest` |
+| `dxf_sheet_scaffold.py` | DXF 图幅／图层／图签／指北针／比例尺 + 画图自检 | `--demo 图.dxf`；`--preview 图.dxf 图.png` |
+
+想直接看它们能不能跑通，先跑一条命令：`python selfcheck.py`（五支脚本各跑一遍，
+对着 `evals/fixture/` 里故意埋的 11 个缺陷逐条核「抓到没有」，应当报「埋的 11 条缺陷被抓到 11 条」）。
+单独跑哪一支都可以：
+
+```bash
+python evals/make_fixtures.py
+python scripts/audit_manual_coverage.py --manual evals/fixture/指导手册.docx \
+       --manifest evals/fixture/对照表.csv --root evals/fixture      # 应当报 4 条硬伤
+python scripts/audit_doc_figs.py --doc evals/fixture/方案书.docx \
+       --figdir evals/fixture/图纸 --registry evals/fixture/图纸目录.csv   # 应当报 5 条硬伤
+python scripts/gates_scaffold.py --demo                              # 3/3 道门响过
+python scripts/dxf_sheet_scaffold.py --demo-bad /tmp/bad.dxf         # 越框＋压图签该响
+```
+
+## 参考（按需读，别一次全读）
+
+- `references/dependencies.md` — 开源库清单：每个库干什么、坑在哪（ezdxf 的 `setup=True`、
+  MTEXT 的 `plain_text()`、python-docx 读不回表格等）
+- `references/pipeline.md` — 十步管线、顺序、时效性、确定性
+- `references/gates.md` — 判据形状、容差、门不瞎、覆盖棘轮
+- `references/manual-coverage.md` — 手册图目与作业对应的查法
+- `references/sheet-drafting.md` — 图幅、真比例、制图要素、图例↔图示双向、版面装箱
+- `references/case-research.md` — 案例检索、原图入册、借鉴注记格式
+- `references/report-writing.md` — 方案书结构与数字口径
+- `references/no-fabrication.md` — 判读分档、第二来源、未做要明说
+- `references/windows-chinese-paths.md` — Windows＋中文路径九件事（含「源码里中文串别用英文引号」）
+
+## 汇报之前
+
+- 三支审计脚本 + `--selftest` 全部跑过，红字 0；
+- 每张图用眼睛看过（拼成 2~3 张接触表一次看完整套）；
+- 说得出"哪条作业对应哪张图"，说不出来的那条就是没做，写"未做，原因 X"。
+
+## 版本
+
+- **1.2.0（2026-10-07）** — 三处来自真实返工的补强：① 一页简版列为正式交付物，并写清怎么在
+  一页里同时容下总平面与指导手册原图图版（并排省纸、字数门连表格一起数、纸幅要显式设成 A4）；
+  ② 图集新增一条硬要求：有现状车行路就要有一张通行组织图，且与总平面同比例可叠图；
+  ③ 车行路幅判据补上「三边 U 形闭合条带」这一类（漏判它＝往真车道上种树），并配一条
+  「新植不落车行走廊」的断言。另见 `manual-coverage.md`：手册原图可以直接从 docx 抽出来排图版。
+- **1.0.0** — 初版：五支脚本（环境体检／手册图目对账／方案书插图四查／三端点名门＋破坏自测／
+  DXF 图幅脚手架）、`evals/` 埋 11 条缺陷、`selfcheck.py` 一条命令验全套。
