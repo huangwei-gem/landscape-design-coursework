@@ -109,7 +109,7 @@ python scripts/dxf_sheet_scaffold.py --demo-bad /tmp/bad.dxf         # 越框＋
 - `references/pipeline.md` — 十步管线、顺序、时效性、确定性，以及「复跑顺序清单自己也要有门」
 - `references/gates.md` — 判据形状、容差、门不瞎、覆盖棘轮
 - `references/manual-coverage.md` — 手册图目与作业对应的查法
-- `references/sheet-drafting.md` — 图幅、真比例、制图要素、图例↔图示双向、版面装箱
+- `references/sheet-drafting.md` — 图幅、真比例、制图要素、图例↔图示双向、版面装箱、彩平（从图纸反着色，不让 AI 重画）
 - `references/case-research.md` — 案例检索、原图入册、借鉴注记格式
 - `references/report-writing.md` — 方案书结构与数字口径
 - `references/no-fabrication.md` — 判读分档、第二来源、未做要明说
@@ -123,6 +123,12 @@ python scripts/dxf_sheet_scaffold.py --demo-bad /tmp/bad.dxf         # 越框＋
 
 ## 版本
 
+- **1.2.6（2026-10-09）** — 「把黑白的变成彩平」这一类要求，走**从图纸反着色**而不是图生图：
+  AI 重画的是像素，教程自己的样例就写着「细节有明显改变」，而本册的冠是逐株真冠幅、树是数得清的。
+  新增 `sheet-drafting.md`「要彩平，但不要让 AI 重画一张」：色块只取图纸上闭合的种植面与画过的冠圆，
+  线稿用原渲染器叠在上头；变换从图上那条红线的 bbox 反解，不重放绘图脚本的坐标系调用；
+  另记两个假账——底图的路是两侧边线不是中线（按半宽铺带会涂出两条错开的灰斑），
+  以及每株的圆心定位点也是圆（拿它做冠幅核对，一半的圆"核不上"）。
 - **1.2.5（2026-10-09）** — 一页纸的图版格子放大到极限后露出的下一层缺陷：窄格子里的编号串
   （`PL-08＋PL-17＋PL-06`）被 Word 在**连字符**处断开，格底掉出孤零零一个「06」。修法是按字宽估字号
   （CJK 1 em／半角 0.52 em，留 6% 余量，下限 5pt），并给排版门加一条判据：**渲成 PDF 读文本层**，
