@@ -54,3 +54,28 @@ docx = sorted(p for p in DOC.glob("*.docx") if not p.name.startswith("~$"))
 
 本项目一次改了四处（打包装配、方案书文本端、插图落点、时效性），因为它们各自 glob 了一遍。
 **别去删那个 `~$` 文件**——那是别人正开着的文档，删了可能丢他的编辑；滤掉就行。
+
+## 用 COM 驱动 Word 数页数：别把自己锁死（第十一件事）
+
+一页门、真排版复验都要真的开一次 Word。`DispatchEx("Word.Application")` 起的实例是**隐形**的，
+脚本被 `timeout` 杀掉或中途抛错时它不会跟着死，于是：
+
+- 它**锁着那个 docx**——下一次构建报 `PermissionError`，而 `~$` 拥有者文件可能早就没了
+  （锁在进程句柄里，不在目录里）；
+- 它**毒化后续所有调用**——新的 `DispatchEx` 会挂在 `Documents.Open` 上不动，看着像"Word 坏了"。
+
+三条自保：
+
+1. **一个进程里只开一次 Word**，把要量的几份文档在同一个 `app` 上循环开完再 `Quit()`。
+   在同一个脚本里连着调两次"开 Word 量一页"，第二次很容易踩到没退干净的实例。
+2. **超时要能留下现场**：`python -u`（stdout 被重定向时是块缓冲，进程被杀等于一行没打印，
+   你会误以为是打开卡住而不是导出卡住），并且把每一步单独 print 出来。
+3. **要清实例就先证明是自己的**：`Get-Process WINWORD | Select Id,StartTime,MainWindowTitle`——
+   启动时间落在你自己那几次调用里、`MainWindowTitle` 为空的才是脚本留下的；
+   有标题或时间更早的是用户开着的，**别动**。`taskkill` 不带 `/F` 对卡在 RPC 等待的实例无效，
+   强杀后它可能仍挂在进程表里，这时 Word 自动化整体不可用，只能等或让用户重启会话——
+   这条没有干净的服务端解法，别指望脚本自己修好。
+
+顺带一条：`Documents.Open(path, ReadOnly=True)` 之后 `ExportAsFixedFormat` 失败时，
+`python-docx` 那边写文件的报错和 Word 的报错长得像，先分清是**句柄被别的 Word 占着**
+还是**导出目标目录不对**。
